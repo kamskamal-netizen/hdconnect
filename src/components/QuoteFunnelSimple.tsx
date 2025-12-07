@@ -87,31 +87,24 @@ const QuoteFunnelSimple = () => {
         return;
       }
 
-      const finalData = {
-        requestType,
-        selectedService,
-        selectedProblem,
-        ...formData
-      };
-
-      // Envoi via Formspree
-      const response = await fetch('https://formspree.io/f/mwpzrqyl', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(finalData),
-      });
-
-      if (!response.ok) {
-        throw new Error("L'envoi de l'e-mail a échoué.");
-      }
-
-      toast({
-        title: "Demande envoyée !",
-        description: "Nous vous recontacterons rapidement.",
-      });
+      // Préparer le message détaillé pour Formspree
+      let detailedMessage = `Type de demande: ${requestType === 'quote' ? 'Devis' : 'Intervention'}\n\n`;
       
+      if (requestType === 'quote') {
+        detailedMessage += `Service demandé: ${serviceOptions.find(s => s.id === selectedService)?.label || selectedService}\n`;
+        detailedMessage += `Période souhaitée: ${formData.timeline}\n`;
+        if (formData.budget) detailedMessage += `Budget estimé: ${formData.budget}\n`;
+        if (formData.description) detailedMessage += `\nDescription du projet:\n${formData.description}\n`;
+      } else {
+        detailedMessage += `Type de problème: ${interventionOptions.find(o => o.id === selectedProblem)?.label || selectedProblem}\n`;
+        detailedMessage += `Urgence: ${formData.urgency}\n`;
+        detailedMessage += `\nDescription du problème:\n${formData.description}\n`;
+      }
+      
+      detailedMessage += `\nAdresse: ${formData.address}`;
+      if (formData.message) detailedMessage += `\n\nMessage supplémentaire:\n${formData.message}`;
+
+     // Envoi vers Supabase (enregistrement d      const { supabaseClient } = await import("@/lib/supabase");\n      \n      // 1. Enregistrement dans la table 'requests' (ou 'devis' / 'interventions')\n      const { data: requestData, error: insertError } = await supabaseClient\n        .from('requests') // Assumons une table 'requests' pour l'archivage\n        .insert([\n          {\n            type: requestType,\n            status: 'new',\n            client_name: formData.name,\n            client_email: formData.email,\n            client_phone: formData.phone,\n            client_address: formData.address,\n            details: detailedMessage, // On stocke le message détaillé pour l'admin\n            // Champs spécifiques au devis\n            service_requested: requestType === 'quote' ? (serviceOptions.find(s => s.id === selectedService)?.label || selectedService) : null,\n            timeline: requestType === 'quote' ? formData.timeline : null,\n            budget: requestType === 'quote' ? formData.budget : null,\n            // Champs spécifiques à l'intervention\n            problem_type: requestType === 'intervention' ? (interventionOptions.find(o => o.id === selectedProblem)?.label || selectedProblem) : null,\n            urgency: requestType === 'intervention' ? formData.urgency : null,\n            message: formData.message || null,\n          }\n        ])\n        .select();\n\n      if (insertError) {\n        console.error('Erreur Supabase lors de l\'insertion:', insertError);\n        throw new Error('Erreur lors de l\'enregistrement de la demande.');\n  // 2. Envoi de l'email de notification et de confirmation via edge function\n      // La fonction Edge Function doit être modifiée pour utiliser le SMTP ou un autre service\n      try {\n        await supabaseClient.functions.invoke('send-quote-email', {\n          body: {\n            requestType: requestType === 'quote' ? 'quote' : 'intervention',\n            clientInfo: {\n              name: formData.name,\n              email: formData.email,\n              phone: formData.phone,\n              address: formData.address\n            },\n            // On envoie l'ID de la demande pour référence dans l'email admin\n            requestId: requestData[0].id,\n            // On envoie le message détaillé pour l'email admin\n            details: detailedMessage,\n          }\n        });\n      } catch (emailError) {\n        console.error('Erreur envoi email (Admin/Client):', emailError);\n        // On continue, mais on avertit l'utilisateur que l'email n'a pas été envoyé\n        toast({ \n          title: "Avertissement", \n          description: "Votre demande a été enregistrée, mais l'email de confirmation n'a pas pu être envoyé (problème de configuration SMTP).", \n          variant: "destructive" \n        });\n     toast({\n        title: "Demande envoyée !",\n        description: "Nous vous recontacterons rapidement. Votre demande a été archivée.",\n      });      
       // Réinitialiser
       setTimeout(() => {
         setStep(1);
@@ -185,7 +178,7 @@ const QuoteFunnelSimple = () => {
       if (requestType === 'quote') {
         return (
           <div className="space-y-6">
-            <h3 className="text-lg font-semibold">Détails de votre projet</h3>
+            <h3 className="text-lg font-semibold text-center md:text-left">Détails de votre projet</h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -232,7 +225,7 @@ const QuoteFunnelSimple = () => {
       } else {
         return (
           <div className="space-y-6">
-            <h3 className="text-lg font-semibold">Détails du problème</h3>
+            <h3 className="text-lg font-semibold text-center md:text-left">Détails du problème</h3>
             
             <div className="space-y-2">
               <label className="text-sm font-medium">Description détaillée du problème *</label>
@@ -271,7 +264,7 @@ const QuoteFunnelSimple = () => {
     if (step === 3) {
       return (
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Vos coordonnées</h3>
+          <h3 className="text-lg font-semibold text-center md:text-left">Vos coordonnées</h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
